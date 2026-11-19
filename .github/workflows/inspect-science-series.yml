@@ -1,5 +1,4 @@
-
-name: Inspect SCIENCE SERIES UI
+name: Inspect SCIENCE SERIES Icons
 
 on:
   push:
@@ -17,83 +16,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract SCIENCE SERIES
-        shell: bash
+      - name: Extract ZIP
         run: |
           set -euo pipefail
-          ZIP_FILE="SCIENCE-SERIES-v1.2-web.zip"
-          test -f "$ZIP_FILE"
           mkdir extracted
-          unzip -q "$ZIP_FILE" -d extracted
+          unzip -q SCIENCE-SERIES-v1.2-web.zip -d extracted
 
-      - name: Find UI text and icon code
-        shell: bash
+      - name: Inspect logo rendering
         run: |
-          set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
           root = Path("extracted")
-          exts = {".html", ".js", ".css", ".json", ".svg"}
-
-          needles = [
-              "毎ターン提案する",
-              "考察の提案",
-              "BGM ON",
-              "BGM OFF",
+          terms = [
+              "brand-mark",
+              "organic",
+              "polymerize",
+              "symbol:",
+              "symbol}",
+              "symbol)",
               "CHEMICA",
-              "lucide-react",
-              "strokeWidth",
-              "stroke-width",
-              "viewBox",
-              "createElementNS",
+              "毎ターン提案する",
+              "BGM ",
           ]
 
-          for path in sorted(root.rglob("*")):
-              if not path.is_file() or path.suffix.lower() not in exts:
-                  continue
+          for path in sorted(root.rglob("*.js")):
+              source = path.read_text(encoding="utf-8", errors="ignore")
+              found = False
 
-              try:
-                  source = path.read_text(encoding="utf-8")
-              except (UnicodeDecodeError, OSError):
-                  continue
-
-              lower = source.lower()
-              printed = False
-
-              for needle in needles:
-                  search = needle.lower()
+              for term in terms:
                   start = 0
-                  shown = 0
-
-                  while shown < 6:
-                      index = lower.find(search, start)
-                      if index < 0:
+                  count = 0
+                  while count < 5:
+                      pos = source.find(term, start)
+                      if pos < 0:
                           break
+                      if not found:
+                          print(f"\n===== {path} =====")
+                          found = True
+                      print(f"\n--- {term} ---")
+                      print(source[max(0,pos-700):pos+1100])
+                      start = pos + len(term)
+                      count += 1
 
-                      if not printed:
-                          print(f"\n========== FILE: {path} ==========")
-                          printed = True
-
-                      left = max(0, index - 350)
-                      right = min(len(source), index + 550)
-                      print(f"\n--- MATCH: {needle} ---")
-                      print(source[left:right].replace("\n", " ")[:900])
-
-                      start = index + len(search)
-                      shown += 1
-
-              if path.suffix.lower() == ".css":
-                  rules = re.findall(
-                      r"([^{}]*?(?:svg|icon|img)[^{}]*?)\{([^{}]*)\}",
-                      source,
-                      re.IGNORECASE
-                  )
-                  if rules:
-                      print(f"\n========== CSS ICON RULES: {path} ==========")
-                      for selector, body in rules[:30]:
-                          print(selector.strip()[:180] + " {" + body.strip()[:250] + "}")
-
-          print("\n========== UI INSPECTION FINISHED ==========")
+          print("\n===== INSPECTION COMPLETE =====")
           PY
