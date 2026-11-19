@@ -24,7 +24,30 @@ jobs:
           set -euo pipefail
           mkdir extracted
           unzip -q SCIENCE-SERIES-v1.2-web.zip -d extracted
-
+      - name: Inspect extracted ZIP structure
+        run: |
+          echo "=== Directories ==="
+          find extracted -maxdepth 4 -type d | sort | head -n 120
+          echo "=== JavaScript and CSS files ==="
+          find extracted -type f \( -name "*.js" -o -name "*.css" \) | sort | head -n 160
+          echo "=== Relevant markers ==="
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path("extracted")
+          for p in root.rglob("*"):
+              if p.is_file() and p.suffix in {".js", ".css"}:
+                  s = p.read_text(encoding="utf-8", errors="ignore")
+                  markers = [
+                      m for m in [
+                          "brand-mark",
+                          "proposal-toggle",
+                          "毎ターン提案する",
+                          'children:["BGM "'
+                      ] if m in s
+                  ]
+                  if markers:
+                      print(f"{p}: {', '.join(markers)}")
+          PY
       - name: Apply fixes
         run: |
           python3 - <<'PY'
