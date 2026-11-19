@@ -18,32 +18,56 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure Pages
+      - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      - name: Extract game ZIP
+      - name: Extract SCIENCE SERIES
         run: |
-          mkdir extracted public
-          unzip -q SCIENCE-SERIES-v1.2-web.zip -d extracted
-          INDEX=$(find extracted -type f -name index.html -print -quit)
-          if [ -z "$INDEX" ]; then
-            echo "index.html not found"
+          ZIP_FILE="SCIENCE-SERIES-v1.2-web.zip"
+
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: ZIP file not found: $ZIP_FILE"
             exit 1
           fi
-          cp -R "$(dirname "$INDEX")"/. public/
 
-      - name: Upload Pages artifact
+          mkdir extracted
+          unzip -q "$ZIP_FILE" -d extracted
+
+          mkdir public
+
+          SOURCE="extracted"
+
+          DIR_COUNT=$(find extracted -mindepth 1 -maxdepth 1 -type d | wc -l)
+          FILE_COUNT=$(find extracted -mindepth 1 -maxdepth 1 -type f | wc -l)
+
+          if [ "$DIR_COUNT" -eq 1 ] && [ "$FILE_COUNT" -eq 0 ]; then
+            SOURCE=$(find extracted -mindepth 1 -maxdepth 1 -type d)
+          fi
+
+          cp -a "$SOURCE"/. public/
+
+          echo "=== Published HTML files ==="
+          find public -name "index.html" -print
+
+          if ! find public -name "index.html" | grep -q .; then
+            echo "ERROR: No index.html found"
+            exit 1
+          fi
+
+      - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: public
 
-      - name: Deploy
+      - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
