@@ -1,0 +1,64 @@
+
+name: Inspect SCIENCE SERIES ZIP
+
+on:
+  push:
+    branches:
+      - inspect-science-series-zip
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Inspect archive contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir extracted
+          unzip -q SCIENCE-SERIES-v1.2-web.zip -d extracted
+
+          echo "=== FILE LIST (first 250) ==="
+          find extracted -type f | sort | head -n 250
+
+          echo "=== MATCHES ==="
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path("extracted")
+          patterns = ["毎ターン提案する", "考察の提案", "BGM ON", "CHEMICA"]
+          exts = {".html", ".js", ".css", ".json", ".svg"}
+          found = 0
+
+          for p in root.rglob("*"):
+              if not p.is_file() or p.suffix.lower() not in exts:
+                  continue
+              try:
+                  s = p.read_text(encoding="utf-8")
+              except Exception:
+                  continue
+
+              for term in patterns:
+                  start = 0
+                  while True:
+                      i = s.find(term, start)
+                      if i < 0:
+                          break
+                      print(f"--- {p} | {term} | offset {i} ---")
+                      print(s[max(0, i-280):min(len(s), i+len(term)+420)].replace("\n", " ")[:760])
+                      found += 1
+                      start = i + len(term)
+                      if found >= 100:
+                          break
+                  if found >= 100:
+                      break
+              if found >= 100:
+                  break
+
+          print(f"TOTAL_MATCHES_SHOWN={found}")
+          PY
