@@ -54,7 +54,7 @@ jobs:
           from pathlib import Path
           import re
 
-          root = Path("extracted")
+          root = Path("extracted") / "SCIENCE-SERIES-web"
 
           apps = ["physica", "chemica", "biotica"]
 
