@@ -1,5 +1,5 @@
 
-name: Inspect SCIENCE SERIES ZIP
+name: Inspect SCIENCE SERIES BGM
 
 on:
   push:
@@ -16,26 +16,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Inspect archive contents
+      - name: Find BGM files
         shell: bash
         run: |
           set -euo pipefail
           mkdir extracted
           unzip -q SCIENCE-SERIES-v1.2-web.zip -d extracted
 
-          echo "=== FILE LIST (first 250) ==="
-          find extracted -type f | sort | head -n 250
-
-          echo "=== MATCHES ==="
           python3 - <<'PY'
           from pathlib import Path
 
           root = Path("extracted")
-          patterns = ["毎ターン提案する", "考察の提案", "BGM ON", "CHEMICA"]
           exts = {".html", ".js", ".css", ".json", ".svg"}
-          found = 0
+          total = 0
 
-          for p in root.rglob("*"):
+          for p in sorted(root.rglob("*")):
               if not p.is_file() or p.suffix.lower() not in exts:
                   continue
               try:
@@ -43,22 +38,10 @@ jobs:
               except Exception:
                   continue
 
-              for term in patterns:
-                  start = 0
-                  while True:
-                      i = s.find(term, start)
-                      if i < 0:
-                          break
-                      print(f"--- {p} | {term} | offset {i} ---")
-                      print(s[max(0, i-280):min(len(s), i+len(term)+420)].replace("\n", " ")[:760])
-                      found += 1
-                      start = i + len(term)
-                      if found >= 100:
-                          break
-                  if found >= 100:
-                      break
-              if found >= 100:
-                  break
+              count = s.lower().count("bgm")
+              if count:
+                  print(f"BGM_COUNT={count} | FILE={p}")
+                  total += count
 
-          print(f"TOTAL_MATCHES_SHOWN={found}")
+          print(f"TOTAL_BGM_MATCHES={total}")
           PY
