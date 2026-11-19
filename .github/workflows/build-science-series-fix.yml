@@ -1,6 +1,9 @@
 name: Build SCIENCE SERIES Fix ZIP
 
 on:
+  push:
+    branches:
+      - inspect-science-series-zip
   workflow_dispatch:
 
 permissions:
