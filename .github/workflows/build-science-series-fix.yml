@@ -1,3 +1,4 @@
+
 name: Build SCIENCE SERIES Fix ZIP
 
 on:
@@ -24,49 +25,30 @@ jobs:
           set -euo pipefail
           mkdir extracted
           unzip -q SCIENCE-SERIES-v1.2-web.zip -d extracted
-      - name: Inspect extracted ZIP structure
-        run: |
-          echo "=== Directories ==="
-          find extracted -maxdepth 4 -type d | sort | head -n 120
-          echo "=== JavaScript and CSS files ==="
-          find extracted -type f \( -name "*.js" -o -name "*.css" \) | sort | head -n 160
-          echo "=== Relevant markers ==="
-          python3 - <<'PY'
-          from pathlib import Path
-          root = Path("extracted")
-          for p in root.rglob("*"):
-              if p.is_file() and p.suffix in {".js", ".css"}:
-                  s = p.read_text(encoding="utf-8", errors="ignore")
-                  markers = [
-                      m for m in [
-                          "brand-mark",
-                          "proposal-toggle",
-                          "毎ターン提案する",
-                          'children:["BGM "'
-                      ] if m in s
-                  ]
-                  if markers:
-                      print(f"{p}: {', '.join(markers)}")
-          PY
+
       - name: Apply fixes
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import re
+          import json
 
           root = Path("extracted") / "SCIENCE-SERIES-web"
-
           apps = ["physica", "chemica", "biotica"]
 
           for app in apps:
+              app_dir = root / app
+
               candidates = [
-                  p for p in (root / app).rglob("*.js")
-                  if "brand-mark" in p.read_text(encoding="utf-8", errors="ignore")
+                  p for p in app_dir.rglob("*.js")
+                  if "brand-mark" in p.read_text(
+                      encoding="utf-8", errors="ignore"
+                  )
               ]
 
               if len(candidates) != 1:
                   raise RuntimeError(
-                      f"{app}: JSファイルを1つに特定できません: {candidates}"
+                      f"{app}: JSファイルを特定できません: {candidates}"
                   )
 
               path = candidates[0]
@@ -75,27 +57,25 @@ jobs:
               proposal_pattern = (
                   r'o\.jsxs\("label",\{className:"proposal-toggle",children:\['
                   r'o\.jsx\("input",\{type:"checkbox",checked:b\.suggestResearch,'
-                  r'onChange:z=>x\(w=>\(\{\.\.\.w,suggestResearch:z\.target\.checked\}\)\)\}\),'
+                  r'onChange:z=>x\(w=>\(\{\.{3}w,suggestResearch:z\.target\.checked\}\)\)\}\),'
                   r'"毎ターン提案する（設定でも変更できます）"\]\}\)'
               )
 
-              s, proposal_count = re.subn(proposal_pattern, "", s)
-
-              if proposal_count != 1:
+              s, n = re.subn(proposal_pattern, "", s)
+              if n != 1:
                   raise RuntimeError(
-                      f"{app}: 毎ターン提案チェック欄の削除に失敗。検出数={proposal_count}"
+                      f"{app}: 考察の提案チェック欄の削除に失敗: {n}"
                   )
 
               bgm_pattern = (
-                  r'o\.jsxs\("button",\{onClick:\(\)=>x\(z=>\(\{\.\.\.z,bgm:!z\.bgm\}\)\),'
+                  r'o\.jsxs\("button",\{onClick:\(\)=>x\(z=>\(\{\.{3}z,bgm:!z\.bgm\}\)\),'
                   r'children:\["BGM ",b\.bgm\?"ON":"OFF"\]\}\),?'
               )
 
-              s, bgm_count = re.subn(bgm_pattern, "", s)
-
-              if bgm_count != 1:
+              s, n = re.subn(bgm_pattern, "", s)
+              if n != 1:
                   raise RuntimeError(
-                      f"{app}: 設定欄のBGMボタン削除に失敗。検出数={bgm_count}"
+                      f"{app}: 設定欄のBGMボタン削除に失敗: {n}"
                   )
 
               organic_marker = 'r==="organic"&&o.jsxs(o.Fragment,{children:['
@@ -116,16 +96,155 @@ jobs:
                       raise RuntimeError("CHEMICAのアイコン設定が見つかりません")
                   s = s.replace('symbol:"organic"', 'symbol:"flask"', 1)
 
+              # CHEMICA・BIOTICAはホーム画面用アイコンをタイトルバーにも使用
+              if app in {"chemica", "biotica"}:
+                  html_path = app_dir / "index.html"
+                  if not html_path.exists():
+                      raise RuntimeError(f"{app}: index.html がありません")
+
+                  html = html_path.read_text(encoding="utf-8", errors="ignore")
+                  home_icon = None
+
+                  # iOSホーム画面用アイコンを優先
+                  link_tags = re.findall(
+                      r"<link\b[^>]*>", html, flags=re.IGNORECASE
+                  )
+
+                  for tag in link_tags:
+                      rel = re.search(
+                          r"""rel=["']([^"']+)["']""",
+                          tag, flags=re.IGNORECASE
+                      )
+                      href = re.search(
+                          r"""href=["']([^"']+)["']""",
+                          tag, flags=re.IGNORECASE
+                      )
+
+                      if (
+                          rel and href
+                          and "apple-touch-icon" in rel.group(1).lower()
+                      ):
+                          home_icon = href.group(1).split("?")[0]
+                          break
+
+                  # 見つからない場合はWeb App Manifestを確認
+                  if home_icon is None:
+                      manifest_tag = next(
+                          (
+                              tag for tag in link_tags
+                              if re.search(
+                                  r"""rel=["']manifest["']""",
+                                  tag, flags=re.IGNORECASE
+                              )
+                          ),
+                          None
+                      )
+
+                      if manifest_tag:
+                          href = re.search(
+                              r"""href=["']([^"']+)["']""",
+                              manifest_tag, flags=re.IGNORECASE
+                          )
+
+                          if href:
+                              manifest_href = href.group(1).split("?")[0]
+
+                              if manifest_href.startswith("/"):
+                                  manifest_path = (
+                                      root / manifest_href.lstrip("/")
+                                  )
+                              else:
+                                  manifest_path = app_dir / manifest_href
+
+                              if manifest_path.exists():
+                                  manifest = json.loads(
+                                      manifest_path.read_text(
+                                          encoding="utf-8"
+                                      )
+                                  )
+
+                                  icons = manifest.get("icons", [])
+                                  icons.sort(
+                                      key=lambda item: (
+                                          "192" not in item.get("sizes", ""),
+                                          "512" not in item.get("sizes", "")
+                                      )
+                                  )
+
+                                  for item in icons:
+                                      if item.get("src"):
+                                          home_icon = item["src"].split("?")[0]
+                                          break
+
+                  # 最後の候補
+                  if home_icon is None:
+                      for name in [
+                          "icon-192.png",
+                          "icon.png",
+                          "icon.svg"
+                      ]:
+                          if (app_dir / name).exists():
+                              home_icon = name
+                              break
+
+                  if home_icon is None:
+                      raise RuntimeError(
+                          f"{app}: ホーム画面用アイコンを特定できません"
+                      )
+
+                  if home_icon.startswith("/"):
+                      icon_path = root / home_icon.lstrip("/")
+                      if not icon_path.exists():
+                          icon_path = app_dir / home_icon.lstrip("/")
+                  else:
+                      icon_path = app_dir / home_icon
+
+                  if not icon_path.exists():
+                      raise RuntimeError(
+                          f"{app}: アイコン画像がありません: {home_icon}"
+                      )
+
+                  relative_icon = icon_path.resolve().relative_to(
+                      app_dir.resolve()
+                  ).as_posix()
+
+                  image_src = "./" + relative_icon
+
+                  header_pattern = r'o\.jsx\(vt,\{field:J\.symbol\}\)'
+
+                  header_image = (
+                      f'o.jsx("img",{{src:"{image_src}",'
+                      f'alt:"{app.upper()}",'
+                      f'className:"brand-mark-icon"}})'
+                  )
+
+                  s, n = re.subn(
+                      header_pattern,
+                      lambda _: header_image,
+                      s
+                  )
+
+                  if n != 1:
+                      raise RuntimeError(
+                          f"{app}: タイトルバーアイコンの置換に失敗: {n}"
+                      )
+
+                  print(
+                      f"{app}: ホーム画面用アイコンを適用: {image_src}"
+                  )
+
               path.write_text(s, encoding="utf-8")
               print(f"{app}: JavaScript修正完了")
 
               css_files = [
-                  p for p in (root / app).rglob("*.css")
-                  if ".brand-mark" in p.read_text(encoding="utf-8", errors="ignore")
+                  p for p in app_dir.rglob("*.css")
+                  if ".brand-mark" in p.read_text(
+                      encoding="utf-8", errors="ignore"
+                  )
               ]
 
               if not css_files:
-                  raise RuntimeError(f"{app}: ヘッダー用CSSが見つかりません")
+                  raise RuntimeError(f"{app}: CSSが見つかりません")
 
               css_path = css_files[0]
               css = css_path.read_text(encoding="utf-8")
@@ -138,8 +257,26 @@ jobs:
             display: block;
             flex-shrink: 0;
           }
+
           .in-battle .brand-mark > svg {
             width: 27px !important;
+            height: 24px !important;
+          }
+          """
+
+              if app in {"chemica", "biotica"}:
+                  css += """
+          /* Match home-screen app icon */
+          .brand-mark-icon {
+            width: 30px !important;
+            height: 30px !important;
+            object-fit: contain;
+            display: block;
+            flex-shrink: 0;
+          }
+
+          .in-battle .brand-mark-icon {
+            width: 24px !important;
             height: 24px !important;
           }
           """
@@ -147,7 +284,7 @@ jobs:
               css_path.write_text(css, encoding="utf-8")
               print(f"{app}: CSS修正完了")
 
-          print("すべての修正処理が完了しました")
+          print("すべての修正が完了しました")
           PY
 
       - name: Create fixed ZIP
