@@ -1,4 +1,5 @@
-name: Inspect SCIENCE SERIES Icon Renderer
+
+name: Inspect SCIENCE SERIES Source
 
 on:
   push:
@@ -22,35 +23,41 @@ jobs:
           mkdir extracted
           unzip -q SCIENCE-SERIES-v1.2-web.zip -d extracted
 
-      - name: Find icon renderer
+      - name: Inspect game source
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
           for path in Path("extracted").rglob("*.js"):
               s = path.read_text(encoding="utf-8", errors="ignore")
-              patterns = [
-                  r"function\s+vt\s*\(",
-                  r"\bvt\s*=\s*\(",
-                  r"\bvt\s*=\s*function",
-                  r"\bvt\s*=",
-              ]
 
-              matches = []
-              for pattern in patterns:
-                  matches.extend(list(re.finditer(pattern, s)))
+              print(f"\n\n========== FILE: {path} ==========")
 
-              if matches:
-                  print(f"\n===== {path} =====")
-                  seen = set()
-                  for m in matches[:8]:
-                      start = max(0, m.start() - 500)
-                      end = min(len(s), m.start() + 3500)
-                      if start not in seen:
-                          print("\n--- icon renderer ---")
-                          print(s[start:end])
-                          seen.add(start)
+              # Icon renderer
+              p = s.find("function vt({field")
+              if p >= 0:
+                  print("\n--- ICON RENDERER ---")
+                  print(s[p:p+14000])
+              else:
+                  print("\nIcon renderer not found")
 
-          print("\n===== COMPLETE =====")
+              # CHEMICA icon metadata
+              p = s.find('symbol:"organic"')
+              if p >= 0:
+                  print("\n--- CHEMICA METADATA ---")
+                  print(s[max(0,p-1000):p+1000])
+
+              # Battle proposal toggle
+              p = s.find("毎ターン提案する")
+              if p >= 0:
+                  print("\n--- PROPOSAL TOGGLE ---")
+                  print(s[max(0,p-1200):p+1200])
+
+              # Battle settings row
+              p = s.find("battle-settings-row")
+              if p >= 0:
+                  print("\n--- BATTLE SETTINGS ---")
+                  print(s[max(0,p-500):p+1800])
+
+          print("\n========== INSPECTION COMPLETE ==========")
           PY
