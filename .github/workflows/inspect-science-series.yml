@@ -1,5 +1,5 @@
 
-name: Inspect SCIENCE SERIES Source
+name: Inspect SCIENCE SERIES Header CSS
 
 on:
   push:
@@ -23,41 +23,37 @@ jobs:
           mkdir extracted
           unzip -q SCIENCE-SERIES-v1.2-web.zip -d extracted
 
-      - name: Inspect game source
+      - name: Inspect header and icon styles
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
-          for path in Path("extracted").rglob("*.js"):
+          root = Path("extracted")
+
+          for path in root.rglob("*.js"):
               s = path.read_text(encoding="utf-8", errors="ignore")
+              if "brand-mark" not in s:
+                  continue
 
-              print(f"\n\n========== FILE: {path} ==========")
+              print(f"\n===== HEADER: {path} =====")
 
-              # Icon renderer
-              p = s.find("function vt({field")
-              if p >= 0:
-                  print("\n--- ICON RENDERER ---")
-                  print(s[p:p+14000])
-              else:
-                  print("\nIcon renderer not found")
+              for term in ["brand-mark", "className:\"brand\"", "symbol:\"organic\""]:
+                  p = s.find(term)
+                  if p >= 0:
+                      print(f"\n--- {term} ---")
+                      print(s[max(0,p-1000):p+1800])
 
-              # CHEMICA icon metadata
-              p = s.find('symbol:"organic"')
-              if p >= 0:
-                  print("\n--- CHEMICA METADATA ---")
-                  print(s[max(0,p-1000):p+1000])
+          for path in root.rglob("*.css"):
+              s = path.read_text(encoding="utf-8", errors="ignore")
+              matches = list(re.finditer(
+                  r"[^{}]*(?:brand-mark|brand\b|header|svg)[^{}]*\{[^{}]*\}",
+                  s
+              ))
+              if matches:
+                  print(f"\n===== CSS: {path} =====")
+                  for m in matches:
+                      print(m.group(0)[:1200])
 
-              # Battle proposal toggle
-              p = s.find("毎ターン提案する")
-              if p >= 0:
-                  print("\n--- PROPOSAL TOGGLE ---")
-                  print(s[max(0,p-1200):p+1200])
-
-              # Battle settings row
-              p = s.find("battle-settings-row")
-              if p >= 0:
-                  print("\n--- BATTLE SETTINGS ---")
-                  print(s[max(0,p-500):p+1800])
-
-          print("\n========== INSPECTION COMPLETE ==========")
+          print("\n===== HEADER INSPECTION COMPLETE =====")
           PY
