@@ -1,0 +1,49 @@
+
+name: Deploy SCIENCE SERIES
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Extract game ZIP
+        run: |
+          mkdir extracted public
+          unzip -q SCIENCE-SERIES-v1.2-web.zip -d extracted
+          INDEX=$(find extracted -type f -name index.html -print -quit)
+          if [ -z "$INDEX" ]; then
+            echo "index.html not found"
+            exit 1
+          fi
+          cp -R "$(dirname "$INDEX")"/. public/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
