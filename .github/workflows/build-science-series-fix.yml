@@ -87,37 +87,55 @@ jobs:
               )
 
               if organic_marker not in s:
-                  raise RuntimeError(f"{app}: アイコン描画箇所が見つかりません")
+                  raise RuntimeError(
+                      f"{app}: アイコン描画箇所が見つかりません"
+                  )
 
               s = s.replace(organic_marker, flask_icon + organic_marker, 1)
 
               if app == "chemica":
                   if 'symbol:"organic"' not in s:
-                      raise RuntimeError("CHEMICAのアイコン設定が見つかりません")
-                  s = s.replace('symbol:"organic"', 'symbol:"flask"', 1)
-
-              # CHEMICA・BIOTICAはホーム画面用アイコンをタイトルバーにも使用
-              if app in {"chemica", "biotica"}:
-                  html_path = app_dir / "index.html"
-                  if not html_path.exists():
-                      raise RuntimeError(f"{app}: index.html がありません")
-
-                  html = html_path.read_text(encoding="utf-8", errors="ignore")
-                  home_icon = None
-
-                  # iOSホーム画面用アイコンを優先
-                  link_tags = re.findall(
-                      r"<link\b[^>]*>", html, flags=re.IGNORECASE
+                      raise RuntimeError(
+                          "CHEMICAのアイコン設定が見つかりません"
+                      )
+                  s = s.replace(
+                      'symbol:"organic"',
+                      'symbol:"flask"',
+                      1
                   )
 
+              # CHEMICA・BIOTICAはホーム画面用アイコンを使用
+              if app in {"chemica", "biotica"}:
+                  html_path = app_dir / "index.html"
+
+                  if not html_path.exists():
+                      raise RuntimeError(
+                          f"{app}: index.html がありません"
+                      )
+
+                  html = html_path.read_text(
+                      encoding="utf-8",
+                      errors="ignore"
+                  )
+
+                  home_icon = None
+                  link_tags = re.findall(
+                      r"<link\b[^>]*>",
+                      html,
+                      flags=re.IGNORECASE
+                  )
+
+                  # iOSホーム画面用アイコンを優先
                   for tag in link_tags:
                       rel = re.search(
                           r"""rel=["']([^"']+)["']""",
-                          tag, flags=re.IGNORECASE
+                          tag,
+                          flags=re.IGNORECASE
                       )
                       href = re.search(
                           r"""href=["']([^"']+)["']""",
-                          tag, flags=re.IGNORECASE
+                          tag,
+                          flags=re.IGNORECASE
                       )
 
                       if (
@@ -127,14 +145,15 @@ jobs:
                           home_icon = href.group(1).split("?")[0]
                           break
 
-                  # 見つからない場合はWeb App Manifestを確認
+                  # Web App Manifestを確認
                   if home_icon is None:
                       manifest_tag = next(
                           (
                               tag for tag in link_tags
                               if re.search(
                                   r"""rel=["']manifest["']""",
-                                  tag, flags=re.IGNORECASE
+                                  tag,
+                                  flags=re.IGNORECASE
                               )
                           ),
                           None
@@ -143,7 +162,8 @@ jobs:
                       if manifest_tag:
                           href = re.search(
                               r"""href=["']([^"']+)["']""",
-                              manifest_tag, flags=re.IGNORECASE
+                              manifest_tag,
+                              flags=re.IGNORECASE
                           )
 
                           if href:
@@ -154,7 +174,9 @@ jobs:
                                       root / manifest_href.lstrip("/")
                                   )
                               else:
-                                  manifest_path = app_dir / manifest_href
+                                  manifest_path = (
+                                      app_dir / manifest_href
+                                  )
 
                               if manifest_path.exists():
                                   manifest = json.loads(
@@ -173,7 +195,9 @@ jobs:
 
                                   for item in icons:
                                       if item.get("src"):
-                                          home_icon = item["src"].split("?")[0]
+                                          home_icon = (
+                                              item["src"].split("?")[0]
+                                          )
                                           break
 
                   # 最後の候補
@@ -195,7 +219,9 @@ jobs:
                   if home_icon.startswith("/"):
                       icon_path = root / home_icon.lstrip("/")
                       if not icon_path.exists():
-                          icon_path = app_dir / home_icon.lstrip("/")
+                          icon_path = (
+                              app_dir / home_icon.lstrip("/")
+                          )
                   else:
                       icon_path = app_dir / home_icon
 
@@ -210,7 +236,9 @@ jobs:
 
                   image_src = "./" + relative_icon
 
-                  header_pattern = r'o\.jsx\(vt,\{field:J\.symbol\}\)'
+                  header_pattern = (
+                      r'o\.jsx\(vt,\{field:J\.symbol\}\)'
+                  )
 
                   header_image = (
                       f'o.jsx("img",{{src:"{image_src}",'
@@ -224,13 +252,15 @@ jobs:
                       s
                   )
 
-                  if n != 1:
+                  # 複数箇所にある場合もすべて置換
+                  if n < 1:
                       raise RuntimeError(
-                          f"{app}: タイトルバーアイコンの置換に失敗: {n}"
+                          f"{app}: タイトルバーアイコンが見つかりません"
                       )
 
                   print(
-                      f"{app}: ホーム画面用アイコンを適用: {image_src}"
+                      f"{app}: ホーム画面用アイコンを"
+                      f"{n}箇所に適用: {image_src}"
                   )
 
               path.write_text(s, encoding="utf-8")
@@ -239,12 +269,15 @@ jobs:
               css_files = [
                   p for p in app_dir.rglob("*.css")
                   if ".brand-mark" in p.read_text(
-                      encoding="utf-8", errors="ignore"
+                      encoding="utf-8",
+                      errors="ignore"
                   )
               ]
 
               if not css_files:
-                  raise RuntimeError(f"{app}: CSSが見つかりません")
+                  raise RuntimeError(
+                      f"{app}: CSSが見つかりません"
+                  )
 
               css_path = css_files[0]
               css = css_path.read_text(encoding="utf-8")
