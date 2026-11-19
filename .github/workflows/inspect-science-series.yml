@@ -1,5 +1,5 @@
 
-name: Inspect SCIENCE SERIES BGM
+name: Inspect SCIENCE SERIES UI
 
 on:
   push:
@@ -26,43 +26,74 @@ jobs:
           mkdir extracted
           unzip -q "$ZIP_FILE" -d extracted
 
-      - name: Find BGM references
+      - name: Find UI text and icon code
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           root = Path("extracted")
           exts = {".html", ".js", ".css", ".json", ".svg"}
-          total = 0
+
+          needles = [
+              "毎ターン提案する",
+              "考察の提案",
+              "BGM ON",
+              "BGM OFF",
+              "CHEMICA",
+              "lucide-react",
+              "strokeWidth",
+              "stroke-width",
+              "viewBox",
+              "createElementNS",
+          ]
 
           for path in sorted(root.rglob("*")):
               if not path.is_file() or path.suffix.lower() not in exts:
                   continue
+
               try:
                   source = path.read_text(encoding="utf-8")
               except (UnicodeDecodeError, OSError):
                   continue
 
               lower = source.lower()
-              count = lower.count("bgm")
-              if not count:
-                  continue
+              printed = False
 
-              print(f"\n=== FILE: {path} | BGM MATCHES: {count} ===")
-              start = 0
-              shown = 0
-              while shown < 12:
-                  index = lower.find("bgm", start)
-                  if index < 0:
-                      break
-                  left = max(0, index - 220)
-                  right = min(len(source), index + 300)
-                  print(source[left:right].replace("\n", " ")[:520])
-                  start = index + 3
-                  shown += 1
-              total += count
+              for needle in needles:
+                  search = needle.lower()
+                  start = 0
+                  shown = 0
 
-          print(f"\nTOTAL_BGM_MATCHES={total}")
+                  while shown < 6:
+                      index = lower.find(search, start)
+                      if index < 0:
+                          break
+
+                      if not printed:
+                          print(f"\n========== FILE: {path} ==========")
+                          printed = True
+
+                      left = max(0, index - 350)
+                      right = min(len(source), index + 550)
+                      print(f"\n--- MATCH: {needle} ---")
+                      print(source[left:right].replace("\n", " ")[:900])
+
+                      start = index + len(search)
+                      shown += 1
+
+              if path.suffix.lower() == ".css":
+                  rules = re.findall(
+                      r"([^{}]*?(?:svg|icon|img)[^{}]*?)\{([^{}]*)\}",
+                      source,
+                      re.IGNORECASE
+                  )
+                  if rules:
+                      print(f"\n========== CSS ICON RULES: {path} ==========")
+                      for selector, body in rules[:30]:
+                          print(selector.strip()[:180] + " {" + body.strip()[:250] + "}")
+
+          print("\n========== UI INSPECTION FINISHED ==========")
           PY
