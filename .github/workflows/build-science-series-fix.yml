@@ -1,0 +1,139 @@
+name: Build SCIENCE SERIES Fix ZIP
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Extract ZIP
+        run: |
+          set -euo pipefail
+          mkdir extracted
+          unzip -q SCIENCE-SERIES-v1.2-web.zip -d extracted
+
+      - name: Apply fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path("extracted")
+
+          apps = ["physica", "chemica", "biotica"]
+
+          for app in apps:
+              candidates = [
+                  p for p in (root / app).rglob("*.js")
+                  if "brand-mark" in p.read_text(encoding="utf-8", errors="ignore")
+              ]
+
+              if len(candidates) != 1:
+                  raise RuntimeError(
+                      f"{app}: JSファイルを1つに特定できません: {candidates}"
+                  )
+
+              path = candidates[0]
+              s = path.read_text(encoding="utf-8")
+
+              proposal_pattern = (
+                  r'o\.jsxs\("label",\{className:"proposal-toggle",children:\['
+                  r'o\.jsx\("input",\{type:"checkbox",checked:b\.suggestResearch,'
+                  r'onChange:z=>x\(w=>\(\{\.\.\.w,suggestResearch:z\.target\.checked\}\)\)\}\),'
+                  r'"毎ターン提案する（設定でも変更できます）"\]\}\)'
+              )
+
+              s, proposal_count = re.subn(proposal_pattern, "", s)
+
+              if proposal_count != 1:
+                  raise RuntimeError(
+                      f"{app}: 毎ターン提案チェック欄の削除に失敗。検出数={proposal_count}"
+                  )
+
+              bgm_pattern = (
+                  r'o\.jsxs\("button",\{onClick:\(\)=>x\(z=>\(\{\.\.\.z,bgm:!z\.bgm\}\)\),'
+                  r'children:\["BGM ",b\.bgm\?"ON":"OFF"\]\}\),?'
+              )
+
+              s, bgm_count = re.subn(bgm_pattern, "", s)
+
+              if bgm_count != 1:
+                  raise RuntimeError(
+                      f"{app}: 設定欄のBGMボタン削除に失敗。検出数={bgm_count}"
+                  )
+
+              organic_marker = 'r==="organic"&&o.jsxs(o.Fragment,{children:['
+
+              flask_icon = (
+                  'r==="flask"&&o.jsxs(o.Fragment,{children:['
+                  'o.jsx("path",{d:"M65 12h30M70 12v42L42 108q-7 12 8 12h60q15 0 8-12L90 54V12M49 96h62"}),'
+                  'o.jsx("path",{d:"m51 101 13-7 13 7 13-7 13 7"})]}),'
+              )
+
+              if organic_marker not in s:
+                  raise RuntimeError(f"{app}: アイコン描画箇所が見つかりません")
+
+              s = s.replace(organic_marker, flask_icon + organic_marker, 1)
+
+              if app == "chemica":
+                  if 'symbol:"organic"' not in s:
+                      raise RuntimeError("CHEMICAのアイコン設定が見つかりません")
+                  s = s.replace('symbol:"organic"', 'symbol:"flask"', 1)
+
+              path.write_text(s, encoding="utf-8")
+              print(f"{app}: JavaScript修正完了")
+
+              css_files = [
+                  p for p in (root / app).rglob("*.css")
+                  if ".brand-mark" in p.read_text(encoding="utf-8", errors="ignore")
+              ]
+
+              if not css_files:
+                  raise RuntimeError(f"{app}: ヘッダー用CSSが見つかりません")
+
+              css_path = css_files[0]
+              css = css_path.read_text(encoding="utf-8")
+
+              css += """
+          /* Header icon aspect-ratio correction */
+          .brand-mark svg {
+            width: 34px !important;
+            height: 30px !important;
+            display: block;
+            flex-shrink: 0;
+          }
+          .in-battle .brand-mark > svg {
+            width: 27px !important;
+            height: 24px !important;
+          }
+          """
+
+              css_path.write_text(css, encoding="utf-8")
+              print(f"{app}: CSS修正完了")
+
+          print("すべての修正処理が完了しました")
+          PY
+
+      - name: Create fixed ZIP
+        run: |
+          cd extracted
+          zip -qr ../SCIENCE-SERIES-v1.2-web-fixed.zip .
+          cd ..
+          ls -lh SCIENCE-SERIES-v1.2-web-fixed.zip
+
+      - name: Upload fixed ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: SCIENCE-SERIES-v1.2-web-fixed
+          path: SCIENCE-SERIES-v1.2-web-fixed.zip
+          retention-days: 14
