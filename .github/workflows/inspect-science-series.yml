@@ -1,4 +1,4 @@
-name: Inspect SCIENCE SERIES Icons
+name: Inspect SCIENCE SERIES Icon Renderer
 
 on:
   push:
@@ -22,42 +22,35 @@ jobs:
           mkdir extracted
           unzip -q SCIENCE-SERIES-v1.2-web.zip -d extracted
 
-      - name: Inspect logo rendering
+      - name: Find icon renderer
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
-          root = Path("extracted")
-          terms = [
-              "brand-mark",
-              "organic",
-              "polymerize",
-              "symbol:",
-              "symbol}",
-              "symbol)",
-              "CHEMICA",
-              "毎ターン提案する",
-              "BGM ",
-          ]
+          for path in Path("extracted").rglob("*.js"):
+              s = path.read_text(encoding="utf-8", errors="ignore")
+              patterns = [
+                  r"function\s+vt\s*\(",
+                  r"\bvt\s*=\s*\(",
+                  r"\bvt\s*=\s*function",
+                  r"\bvt\s*=",
+              ]
 
-          for path in sorted(root.rglob("*.js")):
-              source = path.read_text(encoding="utf-8", errors="ignore")
-              found = False
+              matches = []
+              for pattern in patterns:
+                  matches.extend(list(re.finditer(pattern, s)))
 
-              for term in terms:
-                  start = 0
-                  count = 0
-                  while count < 5:
-                      pos = source.find(term, start)
-                      if pos < 0:
-                          break
-                      if not found:
-                          print(f"\n===== {path} =====")
-                          found = True
-                      print(f"\n--- {term} ---")
-                      print(source[max(0,pos-700):pos+1100])
-                      start = pos + len(term)
-                      count += 1
+              if matches:
+                  print(f"\n===== {path} =====")
+                  seen = set()
+                  for m in matches[:8]:
+                      start = max(0, m.start() - 500)
+                      end = min(len(s), m.start() + 3500)
+                      if start not in seen:
+                          print("\n--- icon renderer ---")
+                          print(s[start:end])
+                          seen.add(start)
 
-          print("\n===== INSPECTION COMPLETE =====")
+          print("\n===== COMPLETE =====")
           PY
